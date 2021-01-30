@@ -21,6 +21,7 @@
 
 #include <cmath>
 #include <QPainter>
+#include <QPainterPath>
 
 #include "FX.h"
 #include "virtuality.h"
