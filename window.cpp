@@ -19,10 +19,10 @@
 //    case PE_PanelTipLabel: // The panel for a tip label.
 
 #include <QApplication>
-#include <QDesktopWidget>
 #include <QDockWidget>
 #include <QMainWindow>
 #include <QMetaObject>
+#include <QPainterPath>
 #include <QSplitter>
 #include <QTimer>
 #include <QtDebug>
@@ -393,6 +393,7 @@ Style::drawWindowBg(const QStyleOption *option, QPainter *painter, const QWidget
                 ringResetTimer = new QTimer(const_cast<BE::Style*>(this));
                 ringResetTimer->setSingleShot(true);
                 connect(ringResetTimer, SIGNAL(timeout()), SLOT(resetRingPix()));
+                connect(ringResetTimer, &QObject::destroyed, [=]() {ringResetTimer = nullptr;});
                 connect(ringResetTimer, SIGNAL(destroyed()), SLOT(resetRingPix()));
             }
         }
@@ -404,7 +405,8 @@ Style::drawWindowBg(const QStyleOption *option, QPainter *painter, const QWidget
             case 5: y = widget->height() - (gs_overlay->height() + 48); break;
         }
         painter->drawPixmap(x, y, *gs_overlay);
-        ringResetTimer->start(5000);
+        if (ringResetTimer)
+            ringResetTimer->start(5000);
     }
     if (widget->testAttribute(Qt::WA_TranslucentBackground)) {
         const QVariant wdv = widget->property("BespinWindowHints");

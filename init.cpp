@@ -168,6 +168,8 @@ Style::readSettings(QString appName)
     config.winBtnStyle = 2; // this is a kwin deco setting, TODO: read from there?
 
     Animator::Tab::setTransition((Animator::Transition) readInt(TAB_TRANSITION));
+    if (appType == Falkon)
+        Animator::Tab::setTransition(Animator::Jump);
     Animator::Tab::setDuration(clamp(iSettings->value(TAB_DURATION).toUInt(), 150, 4000));
     //END personal settings
     //NOTICE we do not end group here, but below. this way it's open if we don't make use of presets
@@ -175,6 +177,8 @@ Style::readSettings(QString appName)
     // Background ===========================
     config.invert.docks = readBool(INVERT_DOCKS);
     config.invert.headers = readBool(INVERT_HEADERS);
+    if (appName == "sqriptor")
+        config.invert.headers = false;
     config.invert.menubars = readBool(INVERT_MENUBARS);
     config.invert.menus = readBool(INVERT_MENUS);
     config.invert.modals = (appType != KDM) && readBool(INVERT_MODALS);
@@ -278,7 +282,7 @@ extern const QString virtuality_revision();
 void
 Style::init()
 {
-    QTime time; time.start();
+    QElapsedTimer time; time.start();
     // various workarounds... ==========================
     appType = Unknown;
     QString appName;
@@ -321,6 +325,8 @@ Style::init()
             appType = Arora;
         else if ( appName == "konqueror")
             appType = Konqueror;
+        else if ( appName == "falkon")
+            appType = Falkon;
         else if ( appName == "Kde4ToolkitLibrary" )
         {
             appName = "opera";

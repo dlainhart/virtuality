@@ -66,6 +66,7 @@
 #endif
 #ifdef BE_WS_X11
 #include "xproperty.h"
+#include "fixx11h.h"
 #endif
 
 #include "hacks.h"
@@ -140,6 +141,8 @@ void Style::polish( QPalette &pal, bool onInit )
         SWAP_ALL(invertedPalette, QPalette::Base, QPalette::Text);
         SWAP_ALL(invertedPalette, QPalette::Button, QPalette::ButtonText);
         SWAP_ALL(invertedPalette, QPalette::Highlight, QPalette::HighlightedText);
+        invertedPalette.setColor(QPalette::PlaceholderText, FX::blend(invertedPalette.color(QPalette::Active, QPalette::Base),
+                                                                      invertedPalette.color(QPalette::Active, QPalette::Text), 70,30));
         polish(invertedPalette, false);
     }
 
@@ -551,7 +554,11 @@ Style::polish( QWidget * widget )
                     Shadows::manage(widget);
                 else if (widget->inherits("QTableView")) {
                     frame->setFrameShape(QFrame::NoFrame); // ugly and superfluous - has grid and/or headers
+#if QT_VERSION >= 0x060000
+                    if (widget->inherits("QtPrivate::QCalendarView")) {
+#else
                     if (widget->inherits("QCalendarView")) {
+#endif
                         // MEGAUGLY HACK
                         // QCalendarView looks shit. I want. *want* the selected date round.
                         // unfortunately the view uses a private delegate on top of QItemDelegate
@@ -638,7 +645,7 @@ Style::polish( QWidget * widget )
             widget->setForegroundRole(QPalette::WindowText);
             if (widget->layout())
             {   // get rid of nasty indention
-                widget->layout()->setMargin ( 0 );
+                widget->layout()->setContentsMargins(0,0,0,0);
                 widget->layout()->setSpacing ( 0 );
             }
         }
@@ -943,8 +950,8 @@ Style::polish( QWidget * widget )
 
     const bool isDolphinStatusBar = widget->inherits("DolphinStatusBar");
     if (isDolphinStatusBar) {
-        int m[4];
-        widget->getContentsMargins(&m[0], &m[1], &m[2], &m[3]);
+        QMargins marg = widget->contentsMargins();
+        int m[4] = {marg.left(), marg.top(), marg.right(), marg.bottom()};
         for (int i = 0; i < 4; ++i)
             m[i] = qMax(m[i], F(2));
         widget->setContentsMargins(m[0], m[1], m[2], m[3]);

@@ -16,6 +16,7 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <QCache>
 #include <QMainWindow>
 #include <QToolBar>
 #include <QToolButton>
@@ -102,9 +103,11 @@ Style::drawToolButtonLabel(const QStyleOption *option, QPainter *painter, const 
 
     QPalette::ColorRole role = QPalette::WindowText;
     QPalette::ColorRole bgRole = QPalette::Window;
+    bool isTooBar = true;
     if (widget) {
         const QWidget *dad = widget->parentWidget();
-
+        if (dad && !qobject_cast<const QToolBar*>(dad))
+            isTooBar = false;
         const QWidget *w = dad ? dad : widget;
         bgRole = w->backgroundRole();
         role = w->foregroundRole();
@@ -132,16 +135,32 @@ Style::drawToolButtonLabel(const QStyleOption *option, QPainter *painter, const 
     }
 
     if (drawIndicator) {
-        QRect r(RECT.right()-F(6),RECT.y()+F(1),F(5),F(5));
-        if (drawIndicator > 1) {
-            painter->setPen(QPen(COLOR(role), 0.5));
-            painter->setBrush(FCOLOR(Highlight));
+        if (widget && widget->inherits("Fm::PathButton")) {
+            QColor c = drawIndicator > 1 ? FCOLOR(Highlight) : FX::blend(COLOR(bgRole), COLOR(role), 2, 1);
+            painter->setPen(QPen(c, 0.5));
+//            painter->setPen(Qt::NoPen);
+            painter->setBrush(c);
+            QRect r = RECT;
+            Navi::Direction dir = Navi::E;
+            if (option->direction == Qt::RightToLeft) {
+                r.setRight(r.left() + F(8));
+                dir = Navi::W;
+            } else {
+                r.setLeft(r.right() - F(8));
+            }
+            drawSolidArrow(dir, r, painter);
         } else {
-            painter->setPen(QPen(FX::blend(COLOR(bgRole), COLOR(role), 2, 1), F(1)));
-            painter->setBrush(Qt::NoBrush);
+            if (drawIndicator > 1) {
+                painter->setPen(QPen(COLOR(role), 0.5));
+                painter->setBrush(FCOLOR(Highlight));
+            } else {
+                painter->setPen(QPen(FX::blend(COLOR(bgRole), COLOR(role), 2, 1), F(1)));
+                painter->setBrush(Qt::NoBrush);
+            }
+            QRect r(RECT.right()-F(6),RECT.y()+F(1),F(5),F(5));
+            painter->setRenderHint(QPainter::Antialiasing, true);
+            painter->drawEllipse(r);
         }
-        painter->setRenderHint(QPainter::Antialiasing, true);
-        painter->drawEllipse(r);
     }
 
     if (justText) {   // the most simple way
@@ -169,6 +188,15 @@ Style::drawToolButtonLabel(const QStyleOption *option, QPainter *painter, const 
         const int style = config.btn.tool.disabledStyle;
 //         const QIcon::State state = toolbutton->state & State_On ? QIcon::On : QIcon::Off;
         pm = toolbutton->icon.pixmap(RECT.size().boundedTo(pmSize), isEnabled || style ? QIcon::Normal : QIcon::Disabled, QIcon::Off);
+        if (isTooBar && true) {
+            static QCache<qint64, QPixmap> iconCache(64);
+            QPixmap *pix = iconCache[pm.cacheKey()];
+            if (!pix) {
+                pix = new QPixmap(FX::tintedIcon(pm, 1, 1, text));
+                iconCache.insert(pm.cacheKey(), pix);
+            }
+            pm = *pix;
+        }
 #if 0   // this is -in a way- the way it should be done..., but KIconLoader gives a shit on this or anything else
         if (!isEnabled)
             pm = generatedIconPixmap(QIcon::Disabled, pm, toolbutton);

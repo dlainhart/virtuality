@@ -36,15 +36,13 @@ Style::drawTabWidget(const QStyleOption *option, QPainter *painter, const QWidge
 {
     ASSURE_OPTION(twf, TabWidgetFrame);
     SAVE_PAINTER(Pen);
-    QStyleOptionTabBarBaseV2 tbb;
+    QStyleOptionTabBarBase tbb;
     if (widget)
         tbb.initFrom(widget);
     else
         tbb.QStyleOption::operator=(*twf);
     tbb.shape = twf->shape; tbb.rect = twf->rect;
-    if HAVE_OPTION(twf2, TabWidgetFrameV2) {
-        tbb.selectedTabRect = twf2->selectedTabRect;
-    }
+    tbb.selectedTabRect = twf->selectedTabRect;
 
 #if QT_VERSION >= 0x050000
 #define VALID_TABBAR_RECT twf->tabBarRect.isValid()
@@ -101,8 +99,7 @@ Style::drawTabBar(const QStyleOption *option, QPainter *painter, const QWidget *
         if (tbb->selectedTabRect.isEmpty())
             return; // only paint tab shapes
 
-        if HAVE_OPTION(tbb2, TabBarBaseV2)
-        if (tbb2->documentMode)
+        if (tbb->documentMode)
             return; // useless and adds confliciting horizintal lines
 
         SAVE_PAINTER(Pen|Alias);
@@ -145,7 +142,11 @@ Style::drawTabBar(const QStyleOption *option, QPainter *painter, const QWidget *
         if (painter->device()->devType() == QInternal::Widget)
             widget = static_cast<QWidget*>(painter->device());
         else {
-            QPaintDevice *dev = QPainter::redirected(painter->device());
+            QPaintDevice *dev = 
+            /*** @todo, this got canned - is the plain device ok?
+                                QPainter::redirected(painter->device());
+            ***/
+                                painter->device();
             if (dev && dev->devType() == QInternal::Widget)
                 widget = static_cast<QWidget*>(dev);
         }
@@ -186,7 +187,7 @@ Style::calcAnimStep(const QStyleOption *option, QPainter *painter, const QWidget
     OPT_ENABLED OPT_HOVER OPT_SUNKEN
     sunken = sunken || (option->state & State_Selected);
     animStep = 0;
-    if ( isEnabled && !sunken )
+    if ( isEnabled )
     {
         Animator::IndexInfo *info = 0;
         int index = -1, hoveredIndex = -1;
@@ -199,16 +200,20 @@ Style::calcAnimStep(const QStyleOption *option, QPainter *painter, const QWidget
             // sometimes... MANY times devs just set the tabTextColor to QPalette::WindowText,
             // because it's defined that it has to be this. Qt provides all these color roles just
             // to waste space and time... ...
+            QPalette::ColorRole fgrole = QPalette::WindowText, bgrole = QPalette::Window;
+            if (widget && config.invert.headers) {
+                fgrole = QPalette::Window; bgrole = QPalette::WindowText;
+            }
             const QColor &fgColor = tbar->tabTextColor(index - 1);
-            const QColor &stdFgColor = tbar->palette().color(QPalette::Window);
+            const QColor &stdFgColor = tbar->palette().color(fgrole);
             if (fgColor.isValid() && fgColor != stdFgColor)
             {
-                if (fgColor == tbar->palette().color(QPalette::WindowText))
+                if (fgColor == tbar->palette().color(bgrole))
                     const_cast<QTabBar*>(tbar)->setTabTextColor(index - 1, stdFgColor); // fixed
                 else // nope, this is really a custom color that will likley contrast just enough with QPalette::Window...
                 {
                     customColor = true;
-                    if (FX::haveContrast(tbar->palette().color(QPalette::WindowText), fgColor))
+                    if (FX::haveContrast(tbar->palette().color(bgrole), fgColor))
                         painter->setPen(fgColor);
                 }
             }
@@ -278,10 +283,10 @@ Style::drawTab(const QStyleOption *option, QPainter *painter, const QWidget *wid
 void
 Style::drawTabShape(const QStyleOption *option, QPainter *painter, const QWidget *) const
 {
-    if HAVE_OPTION(tab3, TabV3) {
-        if (tab3->documentMode)
-            return; // useless and adds confliciting horizintal lines resp. wrong colors
-    }
+    const QStyleOptionTab *tab = qstyleoption_cast<const QStyleOptionTab*>(option);
+    if (tab && tab->documentMode)
+        return; // useless and adds confliciting horizintal lines resp. wrong colors
+
     if (config.invert.headers) {
         SAVE_PAINTER(Pen|Brush);
         painter->setPen(Qt::NoPen);
@@ -289,7 +294,8 @@ Style::drawTabShape(const QStyleOption *option, QPainter *painter, const QWidget
         painter->drawRect(RECT);
         RESTORE_PAINTER
     } else if (!(option->state & State_Selected)) {
-        ASSURE_OPTION(tab, Tab);
+        if (!tab)
+            return;
         SAVE_PAINTER(Pen|Alias|Brush);
         painter->setClipping(false);
         painter->setPen(QPen(FRAME_COLOR, FRAME_STROKE_WIDTH));
@@ -366,9 +372,7 @@ Style::drawTabLabel(const QStyleOption *option, QPainter *painter, const QWidget
             break;
     }
 
-    const QStyleOptionTabV3 *tabV3 = qstyleoption_cast<const QStyleOptionTabV3*>(option);
-
-    if (selected && tabV3 && tabV3->documentMode) {
+    if (selected && tab->documentMode) {
         alignment &= ~(Qt::AlignBottom|Qt::AlignTop);
         alignment |= Qt::AlignVCenter;
     }
@@ -381,15 +385,12 @@ Style::drawTabLabel(const QStyleOption *option, QPainter *painter, const QWidget
         else
             { newX = 0; newY = tr.y() + tr.height(); newRot = -90; }
         tr.setRect(0, 0, tr.height(), tr.width());
-        QMatrix m; m.translate(newX, newY); m.rotate(newRot);
-        painter->setMatrix(m, true);
+        QTransform m; m.translate(newX, newY); m.rotate(newRot);
+        painter->setTransform(m, true);
     }
 
     if (!tab->icon.isNull()) {
-        QSize iconSize;
-        if (const QStyleOptionTabV2 *tabV2 = qstyleoption_cast<const QStyleOptionTabV2*>(tab)) {
-            iconSize = tabV2->iconSize;
-        }
+        QSize iconSize = tab->iconSize;
         if (!iconSize.isValid()) {
             if (const QTabBar* tabbar = qobject_cast<const QTabBar*>(widget)) {
                 iconSize = tabbar->iconSize();
@@ -452,32 +453,44 @@ Style::drawTabLabel(const QStyleOption *option, QPainter *painter, const QWidget
         return;
     }
 
-    if (tabV3) {
+    if (tab) {
         if (vertical) {
-            if (tabV3->leftButtonSize.isValid())
-                tr.setLeft(tr.left() + tabV3->leftButtonSize.height() + F(4));
-            if (tabV3->rightButtonSize.isValid())
-                tr.setRight(tr.right() - (tabV3->rightButtonSize.height() + F(4)));
+            QSize lbs, rbs;
+            if (east) {
+                 lbs = tab->leftButtonSize; rbs = tab->rightButtonSize;
+            } else {
+                rbs = tab->leftButtonSize; lbs = tab->rightButtonSize;
+            }
+            if (lbs.isValid())
+                tr.setLeft(tr.left() + lbs.height() + F(4));
+            if (rbs.isValid())
+                tr.setRight(tr.right() - (rbs.height() + F(4)));
         } else {
-            if (tabV3->leftButtonSize.isValid())
-                tr.setLeft(tr.left() + tabV3->leftButtonSize.width() + F(4));
-            if (tabV3->rightButtonSize.isValid())
-                tr.setRight(tr.right() - (tabV3->rightButtonSize.width()+F(4)));
+            if (tab->leftButtonSize.isValid())
+                tr.setLeft(tr.left() + tab->leftButtonSize.width() + F(4));
+            if (tab->rightButtonSize.isValid())
+                tr.setRight(tr.right() - (tab->rightButtonSize.width()+F(4)));
         }
     }
 
     // color adjustment
     bool elide(false);
     QColor cF, cB;
-    if (inverted) {
-        cF = hasFocus && selected &&
-             FX::haveContrast(FCOLOR(Highlight), FCOLOR(WindowText)) ? FCOLOR(Highlight) : FCOLOR(Window);
-        cB = FCOLOR(WindowText);
+    if (hasFocus && selected && FX::haveContrast(FCOLOR(Highlight), FCOLOR(WindowText))) {
+        cF = FCOLOR(Highlight);
+    } else if (customColor) {
+        if (FX::haveContrast(inverted ? FCOLOR(WindowText) : FCOLOR(Window), painter->pen().color())) {
+            cF = painter->pen().color();
+        } else {
+            QFont fnt = painter->font();
+            fnt.setItalic(true);
+            painter->setFont(fnt);
+        }
     } else {
-        cF = hasFocus && selected &&
-             FX::haveContrast(FCOLOR(Highlight), FCOLOR(Window)) ? FCOLOR(Highlight) : FCOLOR(WindowText);
-        cB = FCOLOR(Window);
+        cF = inverted ? FCOLOR(Window) : FCOLOR(WindowText);
     }
+    cB = inverted ? FCOLOR(WindowText) : FCOLOR(Window);
+
     if (selected) {
         if (vertical) {
             setBold(painter, tab->text, tr.width());
@@ -487,7 +500,7 @@ Style::drawTabLabel(const QStyleOption *option, QPainter *painter, const QWidget
                 fnt.setBold(true);
             if (fnt.pointSize() > 0) {
                 fnt.setPointSize(16*fnt.pointSize()/10);
-                float w = QFontMetrics(fnt).width(tab->text);
+                float w = QFontMetrics(fnt).horizontalAdvance(tab->text);
                 w = qMin(1.0f, tr.width()/w);
                 if (w < 0.8f) {
                     elide = true;
@@ -505,12 +518,6 @@ Style::drawTabLabel(const QStyleOption *option, QPainter *painter, const QWidget
                 fnt.setPointSize(13*fnt.pointSize()/10);
             painter->setFont(fnt);
         }
-    } else if (customColor) {
-        if (FX::haveContrast(FCOLOR(WindowText), painter->pen().color()))
-            cF = painter->pen().color();
-        QFont fnt = painter->font();
-        fnt.setUnderline(true);
-        painter->setFont(fnt);
     } else {
         cF = FX::blend(cB, cF, 1, 1);
     }

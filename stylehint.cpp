@@ -146,7 +146,7 @@ int Style::styleHint(StyleHint hint, const QStyleOption *option, const QWidget *
         return true; // The title bar has no border.
     case SH_ScrollBar_RollBetweenButtons:
         return true;
-    case SH_ScrollBar_StopMouseOverSlider:
+    case SH_Slider_StopMouseOverSlider:
         return true; // Stops auto-repeat when the slider reaches the mouse position.
     case SH_BlinkCursorWhenTextSelected:
 //         false; // that's annoying but ...
@@ -225,7 +225,11 @@ int Style::styleHint(StyleHint hint, const QStyleOption *option, const QWidget *
     case SH_ItemView_ActivateItemOnSingleClick: {
         if (config.macStyle) {
             QWidget *w = qApp->focusWidget();
+#if QT_VERSION >= 0x060000
+            return !(w && w->inherits("QtPrivate::QCalendarView"));
+#else
             return !(w && w->inherits("QCalendarView"));
+#endif
         }
         return false;
     }
@@ -245,8 +249,10 @@ int Style::styleHint(StyleHint hint, const QStyleOption *option, const QWidget *
         return Qt::AlignRight;
     case SH_ItemView_PaintAlternatingRowColorsForEmptyArea:
         return true;
+    /***** @todo this got canned, moved to QPlatformTheme
     case SH_SpellCheckUnderlineStyle:
         return config.macStyle ? 4 : 6; // DashDotLine / WaveUnderline
+    *****/
 
     case SH_KCustomStyleElement:
     {

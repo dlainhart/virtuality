@@ -26,11 +26,15 @@
 #include "FX.h"
 
 #ifdef BE_WS_X11
+#if QT_VERSION >= 0x060200
+#include <QGuiApplication>
+#else
 #include <QX11Info>
+#endif
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
-#include "fixx11h.h"
 #include "xproperty.h"
+#include "fixx11h.h"
 namespace BE { namespace FX { static Atom net_wm_cm; } }
 #endif
 
@@ -109,15 +113,39 @@ FX::tintedIcon(QPixmap &pix, int step, int maxSteps, QColor tint)
         int size = img.width() * img.height();
         QRgb *pixel = (QRgb*)img.bits();
         const int r = tint.red(), g = tint.green(), b = tint.blue();
+        int minV = 255, maxV = 0;
+        bool mono = true;
         for (int i = 0; i < size; ++i) {
-            if (int a = qAlpha(*pixel)) {
+            if (qAlpha(*pixel) > 24) {
                 const int v = qGray(*pixel);
-                // stretch alpha
-                a = 255 - v*a/255;
-                a = 255 - a*a/255;
-                *pixel = qRgba(r, g, b, a);
+                maxV = qMax(v, maxV);
+                minV = qMin(v, minV);
+                if (maxV - minV > 10) {
+                    mono = false;
+                    break;
+                }
             }
             ++pixel;
+        }
+        pixel = (QRgb*)img.bits();
+        if (mono) {
+            for (int i = 0; i < size; ++i) {
+                if (int a = qAlpha(*pixel)) {
+                    *pixel = qRgba(r, g, b, a);
+                }
+                ++pixel;
+            }
+        } else {
+            for (int i = 0; i < size; ++i) {
+                if (int a = qAlpha(*pixel)) {
+                    const int v = qGray(*pixel);
+                    // stretch alpha
+                    a = 255 - v*a/255;
+                    a = 255 - a*a/255;
+                    *pixel = qRgba(r, g, b, a);
+                }
+                ++pixel;
+            }
         }
         tintedIcon[1] = QPixmap::fromImage(img);
         lastIconPix[1] = pix.cacheKey();
@@ -235,7 +263,7 @@ bool FX::compositingActive()
 #ifdef BE_WS_X11
     if (!BE::isPlatformX11())
         return true; // we assume wayland - or any other compositing capable display server
-    return XGetSelectionOwner( QX11Info::display(), BE::FX::net_wm_cm ) != None;
+    return XGetSelectionOwner( BE_X11_DISPLAY, BE::FX::net_wm_cm ) != None;
 #else
     return true;
 #endif
@@ -249,7 +277,7 @@ FX::init()
 #ifdef BE_WS_X11
     if (!BE::isPlatformX11())
         return;
-    Display *dpy = QX11Info::display();
+    Display *dpy = BE_X11_DISPLAY;
     char string[ 100 ];
     sprintf(string, "_NET_WM_CM_S%d", DefaultScreen( dpy ));
     BE::FX::net_wm_cm = XInternAtom(dpy, string, False);
@@ -507,14 +535,14 @@ FX::haveContrast(const QColor &a, const QColor &b)
     a.getRgb(&ar,&ag,&ab);
     b.getRgb(&br,&bg,&bb);
 
-    int diff = (299*(ar-br) + 587*(ag-bg) + 114*(ab-bb));
+    /*int diff = (299*(ar-br) + 587*(ag-bg) + 114*(ab-bb));
 
     if (qAbs(diff) < 91001)
-        return false;
+        return false;*/
 
-    diff = (299*qAbs(ar - br) + 587*qAbs(ag - bg) + 114*qAbs(ab - bb)) / 300;
+    int diff = (299*qAbs(ar - br) + 587*qAbs(ag - bg) + 114*qAbs(ab - bb)) / 300;
 
-    return (diff > 300);
+    return (diff > 250);
 }
 
 QColor
